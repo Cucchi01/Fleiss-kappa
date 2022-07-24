@@ -1,11 +1,41 @@
 import pandas as pd
 import numpy
 NUMANNOTATORS = 6
-NENTRIES = 100 
+NENTRIES = 100
 
 headers = ['id', 'hs', 'stance', 'irony', 'profile']
 
 df = pd.read_csv('data/data.csv', names=headers, index_col=0, skiprows=1)
+
+
+class AnalysisFleissKappa(object):
+    def __init__(self, categories, dictReplacements) -> None:
+        self._categories = categories
+        self._dictReplacements = dictReplacements
+
+    def analysisKappa(self, dfAn, label):
+        listDf = []
+
+        for cat in self._categories:
+            df = dfAn.replace(self._dictReplacements[cat])
+            df = df.groupby(["id"], as_index=False)[
+                label].sum()
+            df = df.rename(columns={label: cat})
+            listDf.append(df)
+
+        df = listDf[0]
+        for i in range(1, len(listDf)):
+            df = pd.merge(df, listDf[i], on="id")
+
+        self.__printResultsKappa(df, self._categories, label)
+
+    def __printResultsKappa(self, hsDF, categories, label):
+        k = calculateFleissKappa(hsDF, categories, NENTRIES, NUMANNOTATORS, 0)
+        print("Fleiss' fixed-Kappa for {}:".format(label))
+        print(k)
+        k = calculateFleissKappa(hsDF, categories, NENTRIES, NUMANNOTATORS, 1)
+        print("Fleiss' free-marginal for {}:".format(label))
+        print(k)
 
 
 def calculateFleissKappa(df, categories, NSub, nRatings, version):
@@ -37,101 +67,52 @@ def SumOfSquare(list):
 
 
 def printFleissKappaValues(df):
-    
-    replacement_mapping_dict = {
-        "no": 0,
-        "yes": 1,
-        "none": 0,
-        "against": -1,
-        "favor": 1,
-    }
-
-    df_HS_Ir = df.replace(replacement_mapping_dict)
-
-    analysisKappaHS(df_HS_Ir)
-    analysisKappaIr(df_HS_Ir)
+    analysisKappaIrHS(df)
     analysisKappaStance(df)
 
+def analysisKappaIrHS(df):
+    cat_hs_irony = ['NumYes', 'NumNo']
 
-def analysisKappaHS(dfAn):
-    hsDF = dfAn[["id", "hs"]]
-    hsDF = hsDF.groupby(["id"], as_index=False)["hs"].sum()
-    hsDF = hsDF.rename(columns={'hs': 'NumYesHs'})
-    hsDF["NumNoHs"] = NUMANNOTATORS-hsDF["NumYesHs"]
-    categories = ['NumYesHs', 'NumNoHs']
-    k = calculateFleissKappa(hsDF, categories, NENTRIES, NUMANNOTATORS, 0)
-    print("Fleiss' Fixed-Kappa for hate speech:")
-    print(k)
-    k = calculateFleissKappa(hsDF, categories, NENTRIES, NUMANNOTATORS, 1)
-    print("Fleiss' Free-marginal for hate speech:")
-    print(k)
-
-
-def analysisKappaIr(dfAn):
-    irDF = dfAn[["id", "irony"]]
-    irDF = irDF.groupby(["id"], as_index=False)["irony"].sum()
-    irDF = irDF.rename(columns={'irony': 'NumYesIr'})
-    irDF["NumNoIr"] = NUMANNOTATORS-irDF["NumYesIr"]
-    categories = ['NumYesIr', 'NumNoIr']
-    k = calculateFleissKappa(irDF, categories, NENTRIES, NUMANNOTATORS, 0)
-    print("Fleiss' Fixed-Kappa for irony:")
-    print(k)
-    k = calculateFleissKappa(irDF, categories, NENTRIES, NUMANNOTATORS, 1)
-    print("Fleiss' Free-marginal for irony:")
-    print(k)
-
+    dict_replacement_mapping = {
+        "NumYes": {
+            "no": 0,
+            "yes": 1,
+        },
+        "NumNo": {
+            "no": 1,
+            "yes": 0,
+        }
+    }
+    
+    Analysis = AnalysisFleissKappa(categories=cat_hs_irony, dictReplacements=dict_replacement_mapping)
+    Analysis.analysisKappa(df, 'hs')
+    Analysis.analysisKappa(df, 'irony')
 
 def analysisKappaStance(df):
-
-    replacement_couting_fav = {
-        "no": 0,
-        "yes": 1,
-        "none": 0,
-        "against": 0,
-        "favor": 1,
-    }
-
-    replacement_couting_against = {
-        "no": 0,
-        "yes": 1,
-        "none": 0,
-        "against": 1,
-        "favor": 0,
-    }
-
-    replacement_couting_none = {
-        "no": 0,
-        "yes": 1,
-        "none": 1,
-        "against": 0,
-        "favor": 0,
-    }
-
-    dfCountFav = df.replace(replacement_couting_fav)
-    dfCountAg = df.replace(replacement_couting_against)
-    dfCountNone = df.replace(replacement_couting_none)
-
-    dfCountFav = dfCountFav.groupby(["id"], as_index=False)[
-        "stance"].sum()
-    dfCountFav = dfCountFav.rename(columns={'stance': 'NumFavStance'})
-    dfCountAg = dfCountAg.groupby(["id"], as_index=False)["stance"].sum()
-    dfCountAg = dfCountAg.rename(columns={'stance': 'NumAgStance'})
-    dfCountNone = dfCountNone.groupby(
-        ["id"], as_index=False)["stance"].sum()
-    dfCountNone = dfCountNone.rename(columns={'stance': 'NumNoneStance'})
-
-    dfStance = pd.merge(dfCountFav, dfCountAg, on="id")
-    dfStance = pd.merge(dfStance, dfCountNone, on="id")
-
     categories = ['NumFavStance', 'NumAgStance', 'NumNoneStance']
-    k = calculateFleissKappa(dfStance, categories, NENTRIES, NUMANNOTATORS, 0)
-    print("Fleiss' Fixed-marginal for stance:")
-    print(k)
-    k = calculateFleissKappa(dfStance, categories, NENTRIES, NUMANNOTATORS, 1)
-    print("Fleiss' Free-marginal for stance:")
-    print(k)
+    dict_replacement_mapping = {
+        'NumFavStance':
+        {
+            "none": 0,
+            "against": 0,
+            "favor": 1,
+        },
+        'NumAgStance': 
+        {
+            "none": 0,
+            "against": 1,
+            "favor": 0,
+        },
+        'NumNoneStance':
+        {
+            "none": 1,
+            "against": 0,
+            "favor": 0,
+        }
+    } 
 
-    return
+    Analysis = AnalysisFleissKappa(categories=categories, dictReplacements=dict_replacement_mapping)
+    Analysis.analysisKappa(df, 'stance')
 
 
 printFleissKappaValues(df)
